@@ -6,7 +6,7 @@ Vibecoded with Claude.
 
 Known bugs: Vertical selection in visual mode does not yet work.
 
-## Why?
+## Motivation
 
 Firefox blocks extensions from running in its built-in PDF viewer (`resource://pdf.js/`). This means Vimium C keyboard shortcuts don't work when viewing documents. Nonstop Vimium C fixes this by providing a compatible environment for the extension to inject into.
 

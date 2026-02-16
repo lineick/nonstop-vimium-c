@@ -2,7 +2,7 @@
   "manifest_version": 2,
   "name": "Nonstop Vimium C",
   "version": "0.0.1",
-  "description": "Makes Vimium C work on new tabs and in the PDF viewer on Firefox",
+  "description": "Makes Vimium C work in PDF view on Firefox",
   "browser_specific_settings": {
     "gecko": {
       "id": "nonstop-vimium-c@example.com",
