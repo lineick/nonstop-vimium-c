@@ -1,0 +1,259 @@
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: #404040;
+}
+
+/* Toolbar */
+#nonstop-toolbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 36px;
+  background: #2b2b2b;
+  color: #d9d9d9;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 8px;
+  z-index: 1000;
+  font-size: 13px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+  user-select: none;
+}
+
+#nonstop-toolbar button,
+#nonstop-toolbar a {
+  background: none;
+  border: 1px solid transparent;
+  color: #d9d9d9;
+  cursor: pointer;
+  padding: 2px 6px;
+  font-size: 14px;
+  border-radius: 3px;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+}
+
+#nonstop-toolbar button:hover,
+#nonstop-toolbar a:hover {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+#nonstop-toolbar-left,
+#nonstop-toolbar-center,
+#nonstop-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+#nonstop-page-info {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 4px;
+}
+
+#nonstop-page-input {
+  width: 40px;
+  text-align: center;
+  background: #3b3b3b;
+  border: 1px solid #555;
+  color: #d9d9d9;
+  border-radius: 3px;
+  font-size: 13px;
+  padding: 2px;
+}
+
+#nonstop-page-input:focus {
+  border-color: #4a90d9;
+  outline: none;
+}
+
+#nonstop-zoom-select {
+  background: #3b3b3b;
+  border: 1px solid #555;
+  color: #d9d9d9;
+  border-radius: 3px;
+  font-size: 13px;
+  padding: 2px 4px;
+  cursor: pointer;
+  height: 28px;
+}
+
+/* Sidebar */
+#nonstop-sidebar {
+  position: fixed;
+  top: 36px;
+  left: 0;
+  bottom: 0;
+  width: 220px;
+  background: #2b2b2b;
+  color: #d9d9d9;
+  overflow-y: auto;
+  z-index: 999;
+  border-right: 1px solid #404040;
+  font-size: 13px;
+  padding: 8px 0;
+  transition: transform 0.2s ease;
+}
+
+#nonstop-sidebar.nonstop-hidden {
+  transform: translateX(-100%);
+}
+
+#nonstop-outline a {
+  display: block;
+  padding: 4px 12px;
+  color: #aaa;
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#nonstop-outline a:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+/* Main container */
+#nonstop-container {
+  position: absolute;
+  top: 36px;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  overflow: auto;
+  outline: none;
+  background: #404040;
+}
+
+#nonstop-container.nonstop-sidebar-open {
+  left: 220px;
+}
+
+#nonstop-viewer {
+  padding: 8px 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* Page */
+.nonstop-page {
+  position: relative;
+  margin: 4px auto;
+  background: white;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+.nonstop-page canvas {
+  display: block;
+}
+
+/* Text layer for selection — must match PDF.js expectations */
+.nonstop-text-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow: hidden;
+  opacity: 1;
+  line-height: 1;
+  text-align: initial;
+  text-size-adjust: none;
+  -moz-text-size-adjust: none;
+  forced-color-adjust: none;
+  transform-origin: 0 0;
+  z-index: 2;
+}
+
+.nonstop-text-layer :is(span, br) {
+  color: transparent;
+  position: absolute;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0% 0%;
+}
+
+.nonstop-text-layer .markedContent {
+  top: 0;
+  height: 0;
+}
+
+.nonstop-text-layer ::selection {
+  background: rgba(0, 100, 200, 0.35);
+}
+
+/* Loading indicator */
+#nonstop-loading {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: #999;
+  font-size: 16px;
+  z-index: 500;
+}
+
+#nonstop-loading.nonstop-hidden {
+  display: none;
+}
+
+/* Password dialog */
+#nonstop-password-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+
+#nonstop-password-dialog {
+  background: #2b2b2b;
+  color: #d9d9d9;
+  padding: 24px;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  text-align: center;
+}
+
+#nonstop-password-dialog input {
+  display: block;
+  margin: 12px auto;
+  padding: 6px 8px;
+  font-size: 14px;
+  background: #3b3b3b;
+  border: 1px solid #555;
+  color: #d9d9d9;
+  border-radius: 4px;
+}
+
+#nonstop-password-dialog button {
+  padding: 6px 16px;
+  font-size: 14px;
+  background: #4a90d9;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}

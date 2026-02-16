@@ -1,0 +1,51 @@
+body {
+  max-width: 700px;
+  margin: 0 25px;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+header {
+  font-size: 18px;
+  font-weight: normal;
+  border-bottom: 1px solid #ccc;
+  padding: 20px 0 15px;
+  width: 100%;
+}
+
+section {
+  margin-bottom: 20px;
+}
+
+h2 {
+  margin: 14px 0;
+  font-size: 16px;
+  font-weight: bold;
+}
+
+.option-grid {
+  display: grid;
+  grid-template-columns: 30px auto;
+  row-gap: 10px;
+  align-items: start;
+}
+
+.option-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.option-row label {
+  font-weight: 500;
+}
+
+input[name="newTabUrl"] {
+  width: 400px;
+  padding: 4px 6px;
+  font-size: 15px;
+}
+
+small {
+  color: #666;
+}

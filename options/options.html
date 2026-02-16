@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <meta name="color-scheme" content="light dark">
+    <title>Nonstop Vimium C Options</title>
+    <link rel="stylesheet" type="text/css" href="options.css">
+    <script src="options.js" defer></script>
+  </head>
+  <body>
+    <header>Nonstop Vimium C Options</header>
+
+    <section>
+      <h2>New Tab</h2>
+      <form id="newtab-form">
+        <div class="option-row">
+          <label for="newtab-url">Redirect new tabs to URL:</label>
+          <input id="newtab-url" type="text" name="newTabUrl"
+            placeholder="https://vimium.github.io/new-tab/">
+          <small>Leave empty to use Firefox's default new tab. Set a URL to redirect new tabs there so Vimium C can run.</small>
+        </div>
+      </form>
+    </section>
+
+    <section>
+      <h2>PDF Viewer</h2>
+      <form id="pdf-form">
+        <div class="option-grid">
+          <span><input id="pdf-enabled" type="checkbox" name="pdfViewerEnabled" checked></span>
+          <label for="pdf-enabled">
+            Replace Firefox's built-in PDF viewer<br>
+            <small>Enables Vimium C shortcuts in PDF files</small>
+          </label>
+        </div>
+      </form>
+    </section>
+  </body>
+</html>

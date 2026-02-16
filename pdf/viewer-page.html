@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PDF Viewer</title>
+<link rel="stylesheet" href="viewer.css">
+</head>
+<body>
+<div id="nonstop-toolbar">
+  <div id="nonstop-toolbar-left">
+    <button id="nonstop-sidebar-toggle" title="Toggle Sidebar">&#9776;</button>
+    <button id="nonstop-prev" title="Previous Page">&lsaquo;</button>
+    <span id="nonstop-page-info">
+      <input id="nonstop-page-input" type="text" value="1" size="3">
+      / <span id="nonstop-page-count">-</span>
+    </span>
+    <button id="nonstop-next" title="Next Page">&rsaquo;</button>
+  </div>
+  <div id="nonstop-toolbar-center">
+    <button id="nonstop-zoom-out" title="Zoom Out (-)">&#x2212;</button>
+    <select id="nonstop-zoom-select">
+      <option value="auto">Automatic</option>
+      <option value="page-width" selected>Page Width</option>
+      <option value="page-fit">Page Fit</option>
+      <option value="0.5">50%</option>
+      <option value="0.75">75%</option>
+      <option value="1">100%</option>
+      <option value="1.25">125%</option>
+      <option value="1.5">150%</option>
+      <option value="2">200%</option>
+      <option value="3">300%</option>
+    </select>
+    <button id="nonstop-zoom-in" title="Zoom In (+)">+</button>
+  </div>
+  <div id="nonstop-toolbar-right">
+    <a id="nonstop-download" href="#" download title="Download">&#11015;</a>
+    <a id="nonstop-open" href="#" target="_blank" title="Open Original">&#8599;</a>
+  </div>
+</div>
+<div id="nonstop-sidebar" class="nonstop-hidden">
+  <div id="nonstop-outline"></div>
+</div>
+<div id="nonstop-container" tabindex="0">
+  <div id="nonstop-viewer"></div>
+</div>
+<div id="nonstop-loading">Loading PDF&#8230;</div>
+<script src="viewer-page-init.js"></script>
+<script src="lib/pdf.min.js"></script>
+<script src="viewer.js"></script>
+<script src="vimium-bridge.js"></script>
+</body>
+</html>
