@@ -28,7 +28,7 @@ The PDF viewer includes:
 
 ## Prerequisites
 
-* Firefox 91+
+* Firefox 142+
 - [Vimium C](https://addons.mozilla.org/en-US/firefox/addon/vimium-c/) installed
 
 ## Development Setup
