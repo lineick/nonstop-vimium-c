@@ -3,6 +3,11 @@
 let pdfViewerEnabled = true;
 let newTabUrl = "";
 
+// Tabs where our viewer is active — used to detect "Open Original" clicks
+const viewerTabIds = new Set();
+// Tabs opened from a viewer tab — bypass PDF interception once
+const bypassTabIds = new Set();
+
 // Load settings
 browser.storage.sync.get(["pdfViewerEnabled", "newTabUrl"]).then((data) => {
   if (data.pdfViewerEnabled != null) pdfViewerEnabled = data.pdfViewerEnabled;
@@ -19,16 +24,30 @@ browser.storage.onChanged.addListener((changes, area) => {
   }
 });
 
-// Instead of chrome_url_overrides (which always shows extension name in address
-// bar and steals focus), we listen for new tabs and redirect via tabs.update().
-// This only activates when a URL is configured in settings.
+// --- Tab tracking ---
 
 browser.tabs.onCreated.addListener((tab) => {
-  if (!newTabUrl) return;
-  // Only redirect actual new tabs (not tabs opened with a URL)
-  if (tab.url === "about:newtab" || tab.url === "about:blank" || !tab.url) {
-    browser.tabs.update(tab.id, { url: newTabUrl });
+  // If this tab was opened from a viewer tab, bypass PDF interception for it
+  if (tab.openerTabId && viewerTabIds.has(tab.openerTabId)) {
+    bypassTabIds.add(tab.id);
   }
+
+  // New tab URL redirect (only when configured)
+  if (!newTabUrl) return;
+  if (tab.url === "about:newtab" || tab.url === "about:blank" || !tab.url) {
+    setTimeout(() => {
+      browser.tabs.get(tab.id).then((t) => {
+        if (t && (t.url === "about:newtab" || t.url === "about:blank" || !t.url)) {
+          browser.tabs.update(tab.id, { url: newTabUrl });
+        }
+      }).catch(() => {});
+    }, 150);
+  }
+});
+
+browser.tabs.onRemoved.addListener((tabId) => {
+  viewerTabIds.delete(tabId);
+  bypassTabIds.delete(tabId);
 });
 
 // --- PDF Detection Helpers ---
@@ -68,7 +87,8 @@ function isPdfDownload(details) {
 
 function buildViewerHtml(pdfUrl) {
   const extUrl = browser.runtime.getURL("");
-  const filename = decodeURIComponent(pdfUrl.split("/").pop().split("?")[0].split("#")[0]) || "PDF";
+  let filename = decodeURIComponent(pdfUrl.split("/").pop().split("?")[0].split("#")[0]) || "PDF";
+  if (!/\.pdf$/i.test(filename)) filename += ".pdf";
 
   return `<!DOCTYPE html>
 <html>
@@ -106,8 +126,8 @@ function buildViewerHtml(pdfUrl) {
     <button id="nonstop-zoom-in" title="Zoom In (+)">+</button>
   </div>
   <div id="nonstop-toolbar-right">
-    <a id="nonstop-download" href="${escapeHtml(pdfUrl)}" download title="Download">&#11015;</a>
-    <a id="nonstop-open" href="${escapeHtml(pdfUrl)}" target="_blank" title="Open Original">&#8599;</a>
+    <a id="nonstop-download" href="${escapeHtml(pdfUrl)}" download="${escapeHtml(filename)}" title="Download">&#11015;</a>
+    <a id="nonstop-open" href="${escapeHtml(pdfUrl)}" target="_blank" title="Open in Firefox PDF viewer">&#8599;</a>
   </div>
 </div>
 <div id="nonstop-sidebar" class="nonstop-hidden">
@@ -142,6 +162,12 @@ browser.webRequest.onHeadersReceived.addListener(
     if (!isPdfResponse(details)) return;
     if (isPdfDownload(details)) return;
 
+    // If this tab was opened from a viewer tab, let Firefox handle it natively
+    if (bypassTabIds.has(details.tabId)) {
+      bypassTabIds.delete(details.tabId);
+      return;
+    }
+
     // Modify response headers
     const headers = details.responseHeaders.filter(
       (h) => !["content-security-policy", "content-security-policy-report-only",
@@ -171,18 +197,20 @@ browser.webRequest.onHeadersReceived.addListener(
     }
 
     filter.ondata = () => {
-      // Write viewer HTML on first chunk, discard all PDF data
       writeViewer();
     };
 
     filter.onstop = () => {
-      writeViewer(); // In case no data chunks arrived
+      writeViewer();
       filter.close();
     };
 
     filter.onerror = () => {
       try { filter.disconnect(); } catch (e) { /* ignore */ }
     };
+
+    // Track this tab as running our viewer
+    viewerTabIds.add(details.tabId);
 
     return { responseHeaders: headers };
   },
@@ -196,6 +224,15 @@ browser.webRequest.onBeforeRequest.addListener(
   function (details) {
     if (!pdfViewerEnabled) return;
     if (details.originUrl && details.originUrl.startsWith(browser.runtime.getURL(""))) return;
+
+    // If this tab was opened from a viewer tab, let Firefox handle it natively
+    if (bypassTabIds.has(details.tabId)) {
+      bypassTabIds.delete(details.tabId);
+      return;
+    }
+
+    // Track this tab as running our viewer
+    viewerTabIds.add(details.tabId);
 
     const viewerUrl = browser.runtime.getURL("pdf/viewer-page.html") +
       "?file=" + encodeURIComponent(details.url);

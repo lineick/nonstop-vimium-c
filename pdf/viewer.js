@@ -18,7 +18,8 @@
   var pdfDoc = null;
   var pages = [];         // { div, canvas, textLayer, viewport, rendered, rendering }
   var currentScale = 1;
-  var scaleMode = "page-width"; // "page-width", "page-fit", "auto", or numeric
+  var zoomStorageKey = "nonstop-zoom:" + pdfUrl;
+  var scaleMode = sessionStorage.getItem(zoomStorageKey) || "page-width";
   var containerWidth = 0;
   var containerHeight = 0;
   var observer = null;
@@ -104,6 +105,7 @@
     pdfDoc.getPage(1).then(function (page) {
       var viewport = page.getViewport({ scale: 1 });
       currentScale = computeScale(viewport);
+      updateZoomDisplay();
 
       // Create placeholders for all pages
       for (var i = 1; i <= pdfDoc.numPages; i++) {
@@ -241,6 +243,7 @@
   function renderTextLayer(page, viewport, textLayerDiv) {
     page.getTextContent().then(function (textContent) {
       textLayerDiv.textContent = "";
+      textLayerDiv.className = "nonstop-text-layer textLayer";
       textLayerDiv.style.width = Math.floor(viewport.width) + "px";
       textLayerDiv.style.height = Math.floor(viewport.height) + "px";
 
@@ -254,7 +257,9 @@
         var item = items[i];
 
         if (item.hasEOL) {
-          fragment.appendChild(document.createElement("br"));
+          var br = document.createElement("br");
+          br.setAttribute("role", "presentation");
+          fragment.appendChild(br);
         }
         if (!item.str) continue;
 
@@ -277,6 +282,7 @@
         }
 
         var span = document.createElement("span");
+        span.setAttribute("role", "presentation");
         span.textContent = item.str;
         span.style.fontSize = fontSize.toFixed(1) + "px";
         span.style.fontFamily = fontFamily;
@@ -302,6 +308,21 @@
       // First pass: append all spans at once
       textLayerDiv.appendChild(fragment);
 
+      // Add endOfContent div (like pdf.js)
+      var endOfContent = document.createElement("div");
+      endOfContent.className = "endOfContent";
+      textLayerDiv.appendChild(endOfContent);
+
+      // Bind mouse for endOfContent active state (like pdf.js text_layer_builder)
+      textLayerDiv.addEventListener("mousedown", function (e) {
+        var end = textLayerDiv.querySelector(".endOfContent");
+        if (end) end.classList.add("active");
+      });
+      textLayerDiv.addEventListener("mouseup", function () {
+        var end = textLayerDiv.querySelector(".endOfContent");
+        if (end) end.classList.remove("active");
+      });
+
       // Second pass: measure rendered widths and correct with scaleX
       for (var j = 0; j < spanInfos.length; j++) {
         var info = spanInfos[j];
@@ -322,6 +343,7 @@
 
   function setZoom(newScaleMode) {
     scaleMode = newScaleMode;
+    try { sessionStorage.setItem(zoomStorageKey, scaleMode); } catch (e) {}
     if (!pdfDoc) return;
 
     var info = pages[0];
@@ -538,6 +560,23 @@
     }
   }, { passive: false });
 
+  // Ctrl+Plus / Ctrl+Minus / Ctrl+0 keyboard zoom
+  document.addEventListener("keydown", function (e) {
+    if (!e.ctrlKey && !e.metaKey) return;
+    var tag = (e.target && e.target.tagName) || "";
+    if (/^(INPUT|SELECT|TEXTAREA)$/.test(tag)) return;
+    if (e.key === "=" || e.key === "+") {
+      e.preventDefault();
+      zoomIn();
+    } else if (e.key === "-") {
+      e.preventDefault();
+      zoomOut();
+    } else if (e.key === "0") {
+      e.preventDefault();
+      setZoom("1");
+    }
+  });
+
   // Window resize
   var resizeTimer = null;
   window.addEventListener("resize", function () {
@@ -549,6 +588,20 @@
         setZoom(scaleMode);
       }
     }, 150);
+  });
+
+  // Prevent the scrollable container from consuming single-key presses
+  // (j, k, space, arrows, etc.) via the browser's default scroll behavior.
+  // Vimium-C captures keys at a higher level and handles them itself;
+  // the container's native scroll-on-keypress interferes with that.
+  // Only allow through modifier combos (Ctrl+C, etc.) and input-field keys.
+  container.addEventListener("keydown", function (e) {
+    var tag = (e.target && e.target.tagName) || "";
+    if (/^(INPUT|SELECT|TEXTAREA)$/.test(tag)) return;
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    // Let Tab and F-keys through
+    if (e.key === "Tab" || e.key.length > 1 && e.key.startsWith("F")) return;
+    e.preventDefault();
   });
 
   // Focus the container so keyboard shortcuts work immediately

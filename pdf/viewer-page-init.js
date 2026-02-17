@@ -8,8 +8,11 @@ var file = params.get("file");
 if (file && /^(file|https?):\/\//i.test(file)) {
   window.__nonstopPdfUrl = file;
   window.__nonstopExtUrl = location.href.replace(/pdf\/viewer-page\.html.*/, "");
-  document.getElementById("nonstop-download").href = file;
+  var fn = decodeURIComponent(file.split("/").pop().split("?")[0].split("#")[0]) || "PDF";
+  if (!/\.pdf$/i.test(fn)) fn += ".pdf";
+  var dl = document.getElementById("nonstop-download");
+  dl.href = file;
+  dl.download = fn;
   document.getElementById("nonstop-open").href = file;
-  var filename = decodeURIComponent(file.split("/").pop().split("?")[0].split("#")[0]) || "PDF";
-  document.title = filename;
+  document.title = fn;
 }

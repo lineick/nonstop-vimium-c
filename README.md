@@ -4,7 +4,7 @@ Never interrupt your Vimium C workflow again! This Firefox extension ensures tha
 
 Vibecoded with Claude. 
 
-Known bugs: Vertical selection in visual mode does not yet work.
+Known bugs: Vertical selection (`j`/`k`) in visual mode does not work correctly — see [BUGS.md](BUGS.md) for details.
 
 ## Motivation
 
@@ -23,7 +23,7 @@ The PDF viewer includes:
 * **Text selection** and browser find (Ctrl+F)
 * **Document outline/bookmarks** sidebar
 * **Password-protected** PDF support
-* **Download** and open-original links
+* **Download** and open in Firefox's native PDF viewer
 * **High-DPI / Retina** display support
 
 ## Prerequisites

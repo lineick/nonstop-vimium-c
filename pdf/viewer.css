@@ -166,7 +166,7 @@ html, body {
   display: block;
 }
 
-/* Text layer for selection — must match PDF.js expectations */
+/* Text layer for selection */
 .nonstop-text-layer {
   position: absolute;
   top: 0;
@@ -197,6 +197,24 @@ html, body {
 
 .nonstop-text-layer ::selection {
   background: rgba(0, 100, 200, 0.35);
+}
+
+/* endOfContent: like pdf.js - helps define selection boundaries during mouse text selection.
+   The "active" state is toggled on mousedown/mouseup to control the selectable region. */
+.nonstop-text-layer .endOfContent {
+  display: block;
+  position: absolute;
+  left: 0;
+  top: 100%;
+  right: 0;
+  bottom: 0;
+  z-index: -1;
+  cursor: default;
+  user-select: none;
+}
+
+.nonstop-text-layer .endOfContent.active {
+  top: 0;
 }
 
 /* Loading indicator */
