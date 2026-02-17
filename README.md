@@ -1,6 +1,8 @@
 # Nonstop Vimium C
 
-![](icons/icon.png | width=100)
+<p align="center">
+    <img src="icons/icon.png" width="130">
+</p>
 
 Never interrupt your Vimium C workflow again! This Firefox extension ensures that Vimium C works flawlessly within the **PDF viewer**.
 
