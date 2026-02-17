@@ -6,6 +6,8 @@
 
 Never interrupt your Vimium C workflow again! This Firefox extension ensures that Vimium C works flawlessly within the **PDF viewer**.
 
+It also let's you set a different new tab page to ensure that vimium C also works on new tabs, but it is not recommended as due to firefox the user needs to escape the address bar manually each time. If you need to activate it you can set a url for new tabs in the settings.
+
 Vibecoded with Claude. 
 
 Known bugs: Vertical selection (`j`/`k`) in visual mode does not work correctly — see [BUGS.md](BUGS.md) for details.
