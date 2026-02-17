@@ -32,7 +32,7 @@ zip -r "$OUTPUT" \
   options/options.html \
   options/options.js \
   options/options.css \
-  icons/icon.svg \
+  icons/icon.png \
   LICENSE \
   -x "*.DS_Store" \
   > /dev/null
