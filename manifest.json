@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "Nonstop Vimium C",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Makes Vimium C work in PDF view on Firefox",
   "browser_specific_settings": {
     "gecko": {
@@ -37,7 +37,8 @@
     "icons/*"
   ],
   "icons": {
-    "48": "icons/icon.png",
-    "96": "icons/icon.png"
+    "48": "icons/icon-48.png",
+    "96": "icons/icon-96.png",
+    "128": "icons/icon-128.png"
   }
 }

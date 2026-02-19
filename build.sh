@@ -33,6 +33,9 @@ zip -r "$OUTPUT" \
   options/options.js \
   options/options.css \
   icons/icon.png \
+  icons/icon-128.png \
+  icons/icon-96.png \
+  icons/icon-48.png \
   LICENSE \
   -x "*.DS_Store" \
   > /dev/null
