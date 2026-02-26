@@ -591,16 +591,28 @@
   });
 
   // Prevent the scrollable container from consuming single-key presses
-  // (j, k, space, arrows, etc.) via the browser's default scroll behavior.
+  // (j, k, space, up/down arrows, etc.) via the browser's default scroll behavior.
   // Vimium-C captures keys at a higher level and handles them itself;
   // the container's native scroll-on-keypress interferes with that.
   // Only allow through modifier combos (Ctrl+C, etc.) and input-field keys.
+  // Left/right arrows navigate between pages.
   container.addEventListener("keydown", function (e) {
     var tag = (e.target && e.target.tagName) || "";
     if (/^(INPUT|SELECT|TEXTAREA)$/.test(tag)) return;
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     // Let Tab and F-keys through
     if (e.key === "Tab" || e.key.length > 1 && e.key.startsWith("F")) return;
+    // Left/right arrows for page navigation
+    if (e.key === "ArrowLeft") {
+      goToPage(currentPageNum - 1);
+      e.preventDefault();
+      return;
+    }
+    if (e.key === "ArrowRight") {
+      goToPage(currentPageNum + 1);
+      e.preventDefault();
+      return;
+    }
     e.preventDefault();
   });
 
