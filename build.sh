@@ -24,7 +24,6 @@ zip -r "$OUTPUT" \
   background.js \
   pdf/viewer.js \
   pdf/viewer.css \
-  pdf/vimium-bridge.js \
   pdf/viewer-page.html \
   pdf/viewer-page-init.js \
   pdf/lib/pdf.min.js \
@@ -41,5 +40,3 @@ zip -r "$OUTPUT" \
   > /dev/null
 
 echo "Built: ${OUTPUT} ($(du -h "$OUTPUT" | cut -f1))"
-echo ""
-echo "To submit to AMO: https://addons.mozilla.org/en-US/developers/addon/submit/"

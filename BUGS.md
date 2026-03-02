@@ -41,3 +41,80 @@ The bug can only be fixed by modifying **Vimium C itself** or the **Firefox brow
 - **Vimium C configuration**: As of the current version, Vimium C's `map`/`runKey` configuration does not support mode-specific (visual-mode-only) key remapping, so `j`/`k` cannot be remapped only in visual mode without affecting normal mode navigation.
 
 - **Firefox engine fix**: If Firefox's `Selection.prototype.modify` were improved to correctly handle line detection across absolutely-positioned or CSS-transformed elements, the issue would resolve itself for all extensions.
+
+---
+
+## PDF internal links (annotations) do not work
+
+### Symptom
+
+Internal PDF links (e.g., "Figure 1", table of contents entries, cross-references) are not clickable. The blue coloring visible on some link text is just the PDF's own rendering on the canvas — it is not produced by any link detection. Non-colored links show no indication at all. The annotation layer does not appear to detect or render any link elements.
+
+The outline/sidebar links work fine (those use a separate code path via `pdfDoc.getOutline()`).
+
+### What was investigated
+
+Two approaches were tried. Neither produced clickable (or even detectable) link elements in the DOM.
+
+#### 1. Built-in `pdfjsLib.AnnotationLayer`
+
+The bundled `pdf.min.js` (pdfjs-dist v3.11.174) exports `AnnotationLayer` as a class. Usage:
+
+```javascript
+var layer = new pdfjsLib.AnnotationLayer({
+  div: annotationDiv, page: pageProxy, viewport: viewport,
+});
+layer.render({
+  annotations: annotations,  // from page.getAnnotations()
+  linkService: linkService,
+  renderForms: false,
+});
+```
+
+**Findings from analyzing the minified source:**
+
+- `AnnotationLayer.render()` is `async` but all DOM operations happen **synchronously** before the only `await` (i18n translation).
+- `LinkAnnotationElement.render()` is synchronous. For internal GoTo links it calls `_bindLink(link, dest)` which sets `link.onclick = () => { linkService.goToDestination(dest); return false; }`.
+- The library requires a `linkService` object with methods: `getDestinationHash`, `goToDestination`, `addLinkAttributes`, `getAnchorUrl`, `executeNamedAction`, and properties: `externalLinkTarget`, `externalLinkRel`, `externalLinkEnabled`.
+- Missing `addLinkAttributes` on the linkService caused a silent TypeError that aborted all annotation rendering — this was one early failure.
+- `setLayerDimensions()` (called internally by `render()`) sets the annotation layer div's dimensions using `var(--scale-factor)` CSS custom property. Without this variable defined, the layer collapses to 0×0 and all percentage-based child positions resolve to zero. Setting `--scale-factor` to `currentScale` was required but did not fix the core problem.
+
+**Result:** No `<section>` or `<a>` elements were observed in the DOM after `render()` completed. The annotation layer remained empty despite `page.getAnnotations()` returning data. The built-in AnnotationLayer silently produced no output.
+
+#### 2. Manual fallback rendering
+
+A manual approach was also tried:
+- Calls `page.getAnnotations()` and filters for `subtype === "Link"`
+- Transforms PDF rectangle coordinates to viewport pixels using the viewport transform matrix
+- Creates `<a>` elements with explicit positions, dimensions, `pointer-events: auto`, and click handlers
+
+**Result:** Same outcome — while the code ran without errors, the rendered links had no visible effect. It's unclear whether `page.getAnnotations()` returns valid link annotation data for the test PDFs, or whether the annotation data lacks `dest`/`url`/`action` properties needed for navigation.
+
+#### 3. Architecture (not the cause)
+
+The viewer's HTML injection via `filterResponseData` was verified to have no restrictions that would prevent links:
+- No CSP (headers are stripped)
+- No iframe, shadow DOM, or sandbox
+- No click event interception on the container
+
+### Root cause (likely)
+
+The most probable explanation is that `page.getAnnotations()` either returns no link annotations, or returns annotations without the `dest`/`url`/`action` properties needed to create clickable elements. This could be because:
+
+1. The test PDFs use a link format that pdf.js v3.11.174 doesn't expose through `getAnnotations()`
+2. The annotations are present but are silently skipped by `AnnotationLayer.render()` due to a missing or misconfigured parameter
+3. The PDF's link-like text (blue, underlined) may not actually have annotation objects — some PDFs style text to look like links without embedding actual link annotations
+
+### Suggested next steps
+
+1. **Log the raw annotation data** to see what `page.getAnnotations()` actually returns:
+   ```javascript
+   page.getAnnotations().then(function (annots) {
+     console.log("Page annotations:", JSON.stringify(annots, null, 2));
+   });
+   ```
+   Check whether any annotations have `subtype: "Link"` and whether they have `dest`, `url`, or `action` properties.
+
+2. **Test with a known-good PDF** that has verified GoTo link annotations (e.g., a PDF with a table of contents that links to sections). The pdf.js demo site can be used to verify that a PDF's links work with the same library version.
+
+3. **Compare with the official pdf.js viewer** — open the same PDF in Firefox's built-in viewer (which uses pdf.js) and check if links work there. If they don't, the PDF itself lacks link annotations.
