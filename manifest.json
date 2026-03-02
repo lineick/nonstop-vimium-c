@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "Nonstop Vimium C",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "description": "Makes Vimium C work in PDF view on Firefox",
   "browser_specific_settings": {
     "gecko": {
