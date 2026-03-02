@@ -24,7 +24,6 @@ zip -r "$OUTPUT" \
   background.js \
   pdf/viewer.js \
   pdf/viewer.css \
-  pdf/vimium-bridge.js \
   pdf/viewer-page.html \
   pdf/viewer-page-init.js \
   pdf/lib/pdf.min.js \

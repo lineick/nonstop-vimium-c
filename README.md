@@ -69,7 +69,6 @@ When Firefox receives a PDF response, this extension:
 3. The viewer HTML loads PDF.js from the extension's bundled files.
 4. The PDF is re-fetched from the original URL by the viewer.
 5. Since the page URL remains unchanged, Vimium C injects normally.
-6. A bridge script adapts Vimium C's scroll and mark functions for the PDF viewer.
 
 For `file://` PDFs, the extension redirects to its own viewer page since `filterResponseData()` doesn't apply to `file://` URLs.
 
