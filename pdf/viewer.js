@@ -417,19 +417,25 @@
     }
   }
 
+  function getZoomStep(scale) {
+    if (scale < 1.1) return 0.1;
+    if (scale < 2) return 0.2;
+    if (scale < 4) return 0.3;
+    return 0.5;
+  }
+
   function zoomIn() {
-    var steps = [0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4];
-    var next = steps.find(function (s) { return s > currentScale + 0.01; });
-    if (next) setZoom(String(next));
+    var step = getZoomStep(currentScale);
+    var target = currentScale + step;
+    target = Math.round(target * 10) / 10; // Snap to nearest 10%
+    if (target > currentScale) setZoom(String(Math.min(target, 5)));
   }
 
   function zoomOut() {
-    var steps = [0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4];
-    var prev = null;
-    for (var i = steps.length - 1; i >= 0; i--) {
-      if (steps[i] < currentScale - 0.01) { prev = steps[i]; break; }
-    }
-    if (prev) setZoom(String(prev));
+    var step = getZoomStep(currentScale);
+    var target = currentScale - step;
+    target = Math.round(target * 10) / 10; // Snap to nearest 10%
+    if (target < currentScale) setZoom(String(Math.max(target, 0.1)));
   }
 
   // --- Page Navigation ---
