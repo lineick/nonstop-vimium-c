@@ -12,6 +12,8 @@ Vibecoded with Claude.
 
 Known bugs: Vertical selection (`j`/`k`) in visual mode does not work correctly — see [BUGS.md](BUGS.md) for details.
 
+Available in the firefox extension store: [addons.mozilla.org/en-US/firefox/addon/nonstop-vimium/](addons.mozilla.org/en-US/firefox/addon/nonstop-vimium/)
+
 ## Motivation
 
 Firefox blocks extensions from running in its built-in PDF viewer (`resource://pdf.js/`). This means Vimium C keyboard shortcuts don't work when viewing documents. Nonstop Vimium C fixes this by providing a compatible environment for the extension to inject into.

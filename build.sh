@@ -41,5 +41,3 @@ zip -r "$OUTPUT" \
   > /dev/null
 
 echo "Built: ${OUTPUT} ($(du -h "$OUTPUT" | cut -f1))"
-echo ""
-echo "To submit to AMO: https://addons.mozilla.org/en-US/developers/addon/submit/"
