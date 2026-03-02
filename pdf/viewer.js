@@ -16,7 +16,7 @@
   var zoomSelect = document.getElementById("nonstop-zoom-select");
 
   var pdfDoc = null;
-  var pages = [];         // { div, canvas, textLayer, viewport, rendered, rendering }
+  var pages = [];         // { div, canvas, textLayer, viewport, rendered, rendering, layersStale }
   var currentScale = 1;
   var zoomStorageKey = "nonstop-zoom:" + pdfUrl;
   var scaleMode = sessionStorage.getItem(zoomStorageKey) || "page-fit";
@@ -25,7 +25,7 @@
   var observer = null;
   var currentPageNum = 1;
 
-  // Expose for vimium-bridge
+  // Expose viewer API for external scripts (e.g. Vimium C content scripts)
   window.__nonstopViewer = {
     get container() { return container; },
     get pdfDoc() { return pdfDoc; },
@@ -123,9 +123,9 @@
         observer.observe(p.div);
       });
 
-      // Set up actual dimensions for each page (they may differ)
+      // Set up dimensions and eagerly render text layers for all pages
       for (var j = 1; j <= pdfDoc.numPages; j++) {
-        updatePageDimensions(j);
+        initPageLayers(j);
       }
     });
   }
@@ -148,6 +148,16 @@
     textLayer.className = "nonstop-text-layer";
     div.appendChild(textLayer);
 
+    // Bind endOfContent mouse events once (not on every re-render)
+    textLayer.addEventListener("mousedown", function () {
+      var end = textLayer.querySelector(".endOfContent");
+      if (end) end.classList.add("active");
+    });
+    textLayer.addEventListener("mouseup", function () {
+      var end = textLayer.querySelector(".endOfContent");
+      if (end) end.classList.remove("active");
+    });
+
     viewer.appendChild(div);
 
     pages.push({
@@ -158,18 +168,30 @@
       viewport: null,
       rendered: false,
       rendering: false,
+      layersStale: false,
+      pageProxy: null,
+      textContent: null,
     });
   }
 
-  function updatePageDimensions(pageNum) {
+  function initPageLayers(pageNum) {
     pdfDoc.getPage(pageNum).then(function (page) {
       var vp = page.getViewport({ scale: 1 });
       var info = pages[pageNum - 1];
       info.baseViewport = vp;
+      info.pageProxy = page;
+
       var width = Math.floor(vp.width * currentScale);
       var height = Math.floor(vp.height * currentScale);
       info.div.style.width = width + "px";
       info.div.style.height = height + "px";
+
+      // Cache text content and render text layer eagerly (enables Ctrl+F across all pages)
+      page.getTextContent().then(function (textContent) {
+        info.textContent = textContent;
+        var viewport = page.getViewport({ scale: currentScale });
+        renderTextLayerFromContent(textContent, viewport, info.textLayer);
+      });
     });
   }
 
@@ -197,6 +219,11 @@
       if (entry.isIntersecting) {
         var pageNum = parseInt(entry.target.dataset.page, 10);
         renderPage(pageNum);
+        var info = pages[pageNum - 1];
+        if (info && info.layersStale) {
+          info.layersStale = false;
+          refreshPageLayers(pageNum);
+        }
       }
     });
   }
@@ -222,121 +249,114 @@
       info.div.style.width = Math.floor(viewport.width) + "px";
       info.div.style.height = Math.floor(viewport.height) + "px";
 
-      var renderTask = page.render({
+      page.render({
         canvasContext: ctx,
         viewport: viewport,
-      });
-
-      renderTask.promise.then(function () {
+      }).promise.then(function () {
         info.rendered = true;
         info.rendering = false;
-        renderTextLayer(page, viewport, info.textLayer);
       }).catch(function () {
         info.rendering = false;
       });
     });
   }
 
-  // Manual text layer rendering — pdfjsLib.renderTextLayer is not exported
-  // in pdfjs-dist v3.11.174's core build, so we implement it ourselves.
+  // Manual text layer rendering.
   // Two-pass approach: create+position all spans, then correct widths via scaleX.
-  function renderTextLayer(page, viewport, textLayerDiv) {
-    page.getTextContent().then(function (textContent) {
-      textLayerDiv.textContent = "";
-      textLayerDiv.className = "nonstop-text-layer textLayer";
-      textLayerDiv.style.width = Math.floor(viewport.width) + "px";
-      textLayerDiv.style.height = Math.floor(viewport.height) + "px";
+  function renderTextLayerFromContent(textContent, viewport, textLayerDiv) {
+    textLayerDiv.textContent = "";
+    textLayerDiv.className = "nonstop-text-layer textLayer";
+    textLayerDiv.style.width = Math.floor(viewport.width) + "px";
+    textLayerDiv.style.height = Math.floor(viewport.height) + "px";
 
-      var items = textContent.items;
-      var styles = textContent.styles;
-      var vt = viewport.transform; // [a, b, c, d, tx, ty]
-      var fragment = document.createDocumentFragment();
-      var spanInfos = [];
+    var items = textContent.items;
+    var styles = textContent.styles;
+    var vt = viewport.transform; // [a, b, c, d, tx, ty]
+    var fragment = document.createDocumentFragment();
+    var spanInfos = [];
 
-      for (var i = 0; i < items.length; i++) {
-        var item = items[i];
+    for (var i = 0; i < items.length; i++) {
+      var item = items[i];
 
-        if (item.hasEOL) {
-          var br = document.createElement("br");
-          br.setAttribute("role", "presentation");
-          fragment.appendChild(br);
-        }
-        if (!item.str) continue;
+      if (item.hasEOL) {
+        var br = document.createElement("br");
+        br.setAttribute("role", "presentation");
+        fragment.appendChild(br);
+      }
+      if (!item.str) continue;
 
-        // Compose viewport transform with item transform
-        var it = item.transform;
-        var a  = vt[0]*it[0] + vt[2]*it[1];
-        var b  = vt[1]*it[0] + vt[3]*it[1];
-        var c  = vt[0]*it[2] + vt[2]*it[3];
-        var d  = vt[1]*it[2] + vt[3]*it[3];
-        var tx = vt[0]*it[4] + vt[2]*it[5] + vt[4];
-        var ty = vt[1]*it[4] + vt[3]*it[5] + vt[5];
+      // Compose viewport transform with item transform
+      var it = item.transform;
+      var a  = vt[0]*it[0] + vt[2]*it[1];
+      var b  = vt[1]*it[0] + vt[3]*it[1];
+      var c  = vt[0]*it[2] + vt[2]*it[3];
+      var d  = vt[1]*it[2] + vt[3]*it[3];
+      var tx = vt[0]*it[4] + vt[2]*it[5] + vt[4];
+      var ty = vt[1]*it[4] + vt[3]*it[5] + vt[5];
 
-        var fontSize = Math.hypot(c, d);
-        if (fontSize < 1) continue;
-        var angle = Math.atan2(b, a);
+      var fontSize = Math.hypot(c, d);
+      if (fontSize < 1) continue;
+      var angle = Math.atan2(b, a);
 
-        var fontFamily = "sans-serif";
-        if (item.fontName && styles[item.fontName]) {
-          fontFamily = styles[item.fontName].fontFamily || fontFamily;
-        }
-
-        var span = document.createElement("span");
-        span.setAttribute("role", "presentation");
-        span.textContent = item.str;
-        span.style.fontSize = fontSize.toFixed(1) + "px";
-        span.style.fontFamily = fontFamily;
-        span.style.left = tx.toFixed(1) + "px";
-        span.style.top = (ty - fontSize).toFixed(1) + "px";
-
-        if (Math.abs(angle) > 0.001) {
-          span.style.transform = "rotate(" + angle.toFixed(4) + "rad)";
-        }
-
-        if (item.dir === "rtl") {
-          span.dir = "rtl";
-        }
-
-        fragment.appendChild(span);
-        spanInfos.push({
-          span: span,
-          targetWidth: item.width * viewport.scale,
-          angle: angle,
-        });
+      var fontFamily = "sans-serif";
+      if (item.fontName && styles[item.fontName]) {
+        fontFamily = styles[item.fontName].fontFamily || fontFamily;
       }
 
-      // First pass: append all spans at once
-      textLayerDiv.appendChild(fragment);
+      var span = document.createElement("span");
+      span.setAttribute("role", "presentation");
+      span.textContent = item.str;
+      span.style.fontSize = fontSize.toFixed(1) + "px";
+      span.style.fontFamily = fontFamily;
+      span.style.left = tx.toFixed(1) + "px";
+      span.style.top = (ty - fontSize).toFixed(1) + "px";
 
-      // Add endOfContent div (like pdf.js)
-      var endOfContent = document.createElement("div");
-      endOfContent.className = "endOfContent";
-      textLayerDiv.appendChild(endOfContent);
-
-      // Bind mouse for endOfContent active state (like pdf.js text_layer_builder)
-      textLayerDiv.addEventListener("mousedown", function (e) {
-        var end = textLayerDiv.querySelector(".endOfContent");
-        if (end) end.classList.add("active");
-      });
-      textLayerDiv.addEventListener("mouseup", function () {
-        var end = textLayerDiv.querySelector(".endOfContent");
-        if (end) end.classList.remove("active");
-      });
-
-      // Second pass: measure rendered widths and correct with scaleX
-      for (var j = 0; j < spanInfos.length; j++) {
-        var info = spanInfos[j];
-        if (info.targetWidth <= 0) continue;
-        var actual = info.span.offsetWidth;
-        if (actual <= 0) continue;
-        var scaleX = info.targetWidth / actual;
-        if (Math.abs(scaleX - 1) > 0.01) {
-          var existing = info.span.style.transform;
-          info.span.style.transform = (existing ? existing + " " : "") +
-            "scaleX(" + scaleX.toFixed(3) + ")";
-        }
+      if (Math.abs(angle) > 0.001) {
+        span.style.transform = "rotate(" + angle.toFixed(4) + "rad)";
       }
-    });
+
+      if (item.dir === "rtl") {
+        span.dir = "rtl";
+      }
+
+      fragment.appendChild(span);
+      spanInfos.push({
+        span: span,
+        targetWidth: item.width * viewport.scale,
+        angle: angle,
+      });
+    }
+
+    // First pass: append all spans at once
+    textLayerDiv.appendChild(fragment);
+
+    // Add endOfContent div (like pdf.js)
+    var endOfContent = document.createElement("div");
+    endOfContent.className = "endOfContent";
+    textLayerDiv.appendChild(endOfContent);
+
+    // Second pass: measure rendered widths and correct with scaleX
+    for (var j = 0; j < spanInfos.length; j++) {
+      var sInfo = spanInfos[j];
+      if (sInfo.targetWidth <= 0) continue;
+      var actual = sInfo.span.offsetWidth;
+      if (actual <= 0) continue;
+      var scaleX = sInfo.targetWidth / actual;
+      if (Math.abs(scaleX - 1) > 0.01) {
+        var existing = sInfo.span.style.transform;
+        sInfo.span.style.transform = (existing ? existing + " " : "") +
+          "scaleX(" + scaleX.toFixed(3) + ")";
+      }
+    }
+  }
+
+  // Re-render text layer at the current scale (used on zoom)
+  function refreshPageLayers(pageNum) {
+    var info = pages[pageNum - 1];
+    if (!info.textContent || !info.pageProxy) return;
+
+    var viewport = info.pageProxy.getViewport({ scale: currentScale });
+    renderTextLayerFromContent(info.textContent, viewport, info.textLayer);
   }
 
   // --- Zoom ---
@@ -357,13 +377,12 @@
     // Remember scroll position as a ratio
     var scrollRatio = container.scrollTop / (container.scrollHeight - container.clientHeight || 1);
 
-    // Re-render all visible pages and update dimensions
+    // Reset canvas state and update dimensions
     pages.forEach(function (p) {
       p.rendered = false;
       p.rendering = false;
       p.canvas.width = 0;
       p.canvas.height = 0;
-      p.textLayer.textContent = "";
 
       if (p.baseViewport) {
         var w = Math.floor(p.baseViewport.width * currentScale);
@@ -372,6 +391,23 @@
         p.div.style.height = h + "px";
       }
     });
+
+    // Mark all layers as stale; only refresh visible pages now (lazy refresh for rest)
+    var scrollTop = container.scrollTop;
+    var viewTop = scrollTop;
+    var viewBottom = scrollTop + container.clientHeight;
+    for (var i = 0; i < pages.length; i++) {
+      pages[i].layersStale = true;
+    }
+    for (var i = 0; i < pages.length; i++) {
+      var div = pages[i].div;
+      var divTop = div.offsetTop - container.offsetTop;
+      var divBottom = divTop + div.offsetHeight;
+      if (divBottom >= viewTop && divTop <= viewBottom) {
+        pages[i].layersStale = false;
+        refreshPageLayers(i + 1);
+      }
+    }
 
     // Update zoom select display
     updateZoomDisplay();
@@ -392,7 +428,6 @@
 
   function updateZoomDisplay() {
     var opts = zoomSelect.options;
-    var pct = Math.round(currentScale * 100) + "%";
 
     // Check if current scale matches a preset
     var matched = false;
@@ -412,7 +447,7 @@
         zoomSelect.insertBefore(custom, zoomSelect.firstChild);
       }
       custom.value = String(currentScale);
-      custom.textContent = pct;
+      custom.textContent = Math.round(currentScale * 100) + "%";
       zoomSelect.selectedIndex = 0;
     }
   }

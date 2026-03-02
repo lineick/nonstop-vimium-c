@@ -190,15 +190,6 @@ html, body {
   transform-origin: 0% 0%;
 }
 
-.nonstop-text-layer .markedContent {
-  top: 0;
-  height: 0;
-}
-
-.nonstop-text-layer ::selection {
-  background: rgba(0, 100, 200, 0.35);
-}
-
 /* endOfContent: like pdf.js - helps define selection boundaries during mouse text selection.
    The "active" state is toggled on mousedown/mouseup to control the selectable region. */
 .nonstop-text-layer .endOfContent {

@@ -149,7 +149,6 @@ function buildViewerHtml(pdfUrl) {
 </script>
 <script src="${extUrl}pdf/lib/pdf.min.js"></script>
 <script src="${extUrl}pdf/viewer.js"></script>
-<script src="${extUrl}pdf/vimium-bridge.js"></script>
 </body>
 </html>`;
 }
