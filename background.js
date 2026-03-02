@@ -2,6 +2,7 @@
 
 let pdfViewerEnabled = true;
 let newTabUrl = "";
+let keyboardZoomStep = 0.5;
 
 // Tabs where our viewer is active — used to detect "Open Original" clicks
 const viewerTabIds = new Set();
@@ -9,9 +10,10 @@ const viewerTabIds = new Set();
 const bypassTabIds = new Set();
 
 // Load settings
-browser.storage.sync.get(["pdfViewerEnabled", "newTabUrl"]).then((data) => {
+browser.storage.sync.get(["pdfViewerEnabled", "newTabUrl", "keyboardZoomStep"]).then((data) => {
   if (data.pdfViewerEnabled != null) pdfViewerEnabled = data.pdfViewerEnabled;
   if (data.newTabUrl != null) newTabUrl = data.newTabUrl;
+  if (data.keyboardZoomStep != null) keyboardZoomStep = data.keyboardZoomStep;
 }).catch(() => {});
 
 browser.storage.onChanged.addListener((changes, area) => {
@@ -21,6 +23,9 @@ browser.storage.onChanged.addListener((changes, area) => {
   }
   if (changes.newTabUrl) {
     newTabUrl = changes.newTabUrl.newValue || "";
+  }
+  if (changes.keyboardZoomStep) {
+    keyboardZoomStep = changes.keyboardZoomStep.newValue != null ? changes.keyboardZoomStep.newValue : 0.5;
   }
 });
 
@@ -113,8 +118,8 @@ function buildViewerHtml(pdfUrl) {
     <button id="nonstop-zoom-out" title="Zoom Out (-)">&#x2212;</button>
     <select id="nonstop-zoom-select">
       <option value="auto">Automatic</option>
-      <option value="page-width" selected>Page Width</option>
-      <option value="page-fit">Page Fit</option>
+      <option value="page-width">Page Width</option>
+      <option value="page-fit" selected>Page Fit</option>
       <option value="0.5">50%</option>
       <option value="0.75">75%</option>
       <option value="1">100%</option>
@@ -140,6 +145,7 @@ function buildViewerHtml(pdfUrl) {
 <script>
   window.__nonstopPdfUrl = ${JSON.stringify(pdfUrl).replace(/</g, "\\u003c")};
   window.__nonstopExtUrl = ${JSON.stringify(extUrl).replace(/</g, "\\u003c")};
+  window.__nonstopSettings = { keyboardZoomStep: ${Number(keyboardZoomStep) || 0.5} };
 </script>
 <script src="${extUrl}pdf/lib/pdf.min.js"></script>
 <script src="${extUrl}pdf/viewer.js"></script>

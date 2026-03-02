@@ -19,7 +19,7 @@
   var pages = [];         // { div, canvas, textLayer, viewport, rendered, rendering }
   var currentScale = 1;
   var zoomStorageKey = "nonstop-zoom:" + pdfUrl;
-  var scaleMode = sessionStorage.getItem(zoomStorageKey) || "page-width";
+  var scaleMode = sessionStorage.getItem(zoomStorageKey) || "page-fit";
   var containerWidth = 0;
   var containerHeight = 0;
   var observer = null;
@@ -557,7 +557,7 @@
     scrollTimer = setTimeout(updateCurrentPage, 50);
   });
 
-  // Ctrl+mouse wheel zoom
+  // Ctrl+mouse wheel zoom (10% steps)
   container.addEventListener("wheel", function (e) {
     if (e.ctrlKey) {
       e.preventDefault();
@@ -566,17 +566,36 @@
     }
   }, { passive: false });
 
-  // Ctrl+Plus / Ctrl+Minus / Ctrl+0 keyboard zoom
+  // Ctrl+Plus / Ctrl+Minus / Ctrl+0 keyboard zoom (configurable step)
+  function getKeyboardZoomStep() {
+    var s = window.__nonstopSettings;
+    return (s && s.keyboardZoomStep != null) ? s.keyboardZoomStep : 0.5;
+  }
+
+  function keyboardZoomIn() {
+    var step = getKeyboardZoomStep();
+    var target = currentScale + step;
+    target = Math.round(target * 10) / 10;
+    if (target > currentScale) setZoom(String(Math.min(target, 5)));
+  }
+
+  function keyboardZoomOut() {
+    var step = getKeyboardZoomStep();
+    var target = currentScale - step;
+    target = Math.round(target * 10) / 10;
+    if (target < currentScale) setZoom(String(Math.max(target, 0.1)));
+  }
+
   document.addEventListener("keydown", function (e) {
     if (!e.ctrlKey && !e.metaKey) return;
     var tag = (e.target && e.target.tagName) || "";
     if (/^(INPUT|SELECT|TEXTAREA)$/.test(tag)) return;
     if (e.key === "=" || e.key === "+") {
       e.preventDefault();
-      zoomIn();
+      keyboardZoomIn();
     } else if (e.key === "-") {
       e.preventDefault();
-      zoomOut();
+      keyboardZoomOut();
     } else if (e.key === "0") {
       e.preventDefault();
       setZoom("1");

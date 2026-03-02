@@ -30,4 +30,21 @@ document.addEventListener("DOMContentLoaded", async () => {
   pdfCheckbox.addEventListener("change", async () => {
     await browser.storage.sync.set({ pdfViewerEnabled: pdfCheckbox.checked }).catch(() => {});
   });
+
+  // Keyboard zoom step
+  const zoomStepEl = document.getElementById("keyboard-zoom-step");
+  if (settings.keyboardZoomStep != null) {
+    zoomStepEl.value = Math.round(settings.keyboardZoomStep * 100);
+  }
+
+  let zoomStepTimer = null;
+  zoomStepEl.addEventListener("input", () => {
+    clearTimeout(zoomStepTimer);
+    zoomStepTimer = setTimeout(async () => {
+      const pct = parseInt(zoomStepEl.value, 10);
+      if (pct >= 5 && pct <= 200) {
+        await browser.storage.sync.set({ keyboardZoomStep: pct / 100 }).catch(() => {});
+      }
+    }, 400);
+  });
 });

@@ -46,6 +46,12 @@ input[name="newTabUrl"] {
   font-size: 15px;
 }
 
+input[name="keyboardZoomStep"] {
+  width: 80px;
+  padding: 4px 6px;
+  font-size: 15px;
+}
+
 small {
   color: #666;
 }
