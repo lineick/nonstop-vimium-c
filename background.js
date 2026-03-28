@@ -81,10 +81,8 @@ function isPdfResponse(details) {
 
 function isPdfDownload(details) {
   if (details.url.includes("pdfjs.action=download")) return true;
-  if (details.url.includes("=download")) {
-    const cd = getHeader(details.responseHeaders, "content-disposition");
-    return cd && /^attachment/i.test(cd.value);
-  }
+  const cd = getHeader(details.responseHeaders, "content-disposition");
+  if (cd && /^attachment/i.test(cd.value)) return true;
   return false;
 }
 
