@@ -149,6 +149,10 @@
         layersReady = true;
         observePages();   // visible pages render their layers first
         fillPageLayers(); // the rest fills in the background (Ctrl+F everywhere)
+      }).catch(function (err) {
+        // without sizing there are no reliable layer offsets; text layers
+        // stay off, canvases still render
+        console.warn("nonstop: page sizing failed, text layers disabled: " + (err && err.message || err));
       });
     });
   }
@@ -238,6 +242,10 @@
       var viewport = page.getViewport({ scale: currentScale });
       applySpanWidths(renderTextLayerFromContent(info.textContent, viewport, info));
       renderAnnotationLayer(info, viewport);
+    }).catch(function (err) {
+      // keep layersRendered set: retrying every observer callback would loop;
+      // the page gets another chance on the next zoom (new generation)
+      console.warn("nonstop: page " + info.num + " layers failed: " + (err && err.message || err));
     });
   }
 
@@ -419,7 +427,6 @@
       spanInfos.push({
         span: span,
         targetWidth: item.width * viewport.scale,
-        angle: angle,
       });
 
       if (item.hasEOL) {
@@ -460,7 +467,7 @@
     layer.style.width = Math.floor(viewport.width) + "px";
     layer.style.height = Math.floor(viewport.height) + "px";
 
-    info.annotations.forEach(function (annot) {
+    (info.annotations || []).forEach(function (annot) {
       if (annot.subtype !== "Link" || (!annot.url && !annot.dest)) return;
 
       var rect = viewport.convertToViewportRectangle(annot.rect);
@@ -630,11 +637,12 @@
   function goToDest(dest) {
     var resolved = typeof dest === "string" ? pdfDoc.getDestination(dest) : Promise.resolve(dest);
     resolved.then(function (d) {
-      if (Array.isArray(d) && d[0] != null) {
-        pdfDoc.getPageIndex(d[0]).then(function (idx) {
-          scrollToDest(idx + 1, d);
-        });
-      }
+      if (!Array.isArray(d) || d[0] == null) return null;
+      return pdfDoc.getPageIndex(d[0]).then(function (idx) {
+        scrollToDest(idx + 1, d);
+      });
+    }).catch(function (err) {
+      console.warn("nonstop: broken link destination: " + (err && err.message || err));
     });
   }
 

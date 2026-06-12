@@ -27,8 +27,9 @@ function buildExtensionZip() {
 // serves tests/fixtures/* as application/pdf
 function startFixtureServer() {
   const server = http.createServer((req, res) => {
-    const file = path.join(FIXTURES, req.url.replace(/^\//, "").split("?")[0]);
+    const file = path.resolve(FIXTURES, req.url.replace(/^\//, "").split("?")[0]);
     try {
+      if (!file.startsWith(FIXTURES + path.sep)) throw new Error("outside fixtures");
       const data = fs.readFileSync(file);
       res.writeHead(200, { "Content-Type": "application/pdf" });
       res.end(data);
@@ -63,12 +64,14 @@ function fixtureUrl(name) {
 // recover it from the script tags of an intercepted PDF page
 async function discoverExtensionUuid(driver) {
   await driver.get(fixtureUrl("test-links.pdf"));
-  await driver.sleep(1000);
-  const uuid = await driver.executeScript(`
-    const s = document.querySelector('script[src^="moz-extension"]');
-    return s ? new URL(s.src).host : null;
-  `);
-  if (!uuid) throw new Error("extension did not intercept the PDF response");
+  let uuid = null;
+  await driver.wait(async () => {
+    uuid = await driver.executeScript(`
+      const s = document.querySelector('script[src^="moz-extension"]');
+      return s ? new URL(s.src).host : null;
+    `).catch(() => null);
+    return !!uuid;
+  }, 15000, "extension did not intercept the PDF response");
   return uuid;
 }
 
@@ -83,13 +86,12 @@ async function openViewer(driver, uuid, pdfName) {
   );
   // layers fill progressively after open; these tests assert whole-document
   // state, so wait for the background fill to finish (assumes every fixture
-  // page has text). laziness itself is covered by perf.test.js
+  // page has text; text and annotations render together per page). laziness
+  // itself is covered by perf.test.js
   await driver.wait(async () => {
     return await driver.executeScript(`
       const groups = [...document.querySelectorAll(".nonstop-text-group")];
-      return groups.length > 0 &&
-             groups.every(g => g.children.length > 0) &&
-             document.querySelectorAll(".nonstop-annotation-layer a").length > 0;
+      return groups.length > 0 && groups.every(g => g.children.length > 0);
     `).catch(() => false);
   }, 30000, "viewer did not finish rendering " + pdfName);
   await driver.sleep(500);
