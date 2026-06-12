@@ -10,8 +10,6 @@ It also let's you set a different new tab page to ensure that vimium C also work
 
 Vibecoded with Claude. 
 
-Known bugs: Vertical selection (`j`/`k`) in visual mode does not work correctly — see [BUGS.md](BUGS.md) for details.
-
 Available in the firefox extension store: [addons.mozilla.org/en-US/firefox/addon/nonstop-vimium/](addons.mozilla.org/en-US/firefox/addon/nonstop-vimium/)
 
 ## Motivation
@@ -29,6 +27,7 @@ The PDF viewer includes:
 * **Continuous scroll** with lazy page rendering
 * **Zoom controls** (fit-to-width, fit-to-page, manual zoom, Ctrl+scroll)
 * **Text selection** and browser find (Ctrl+F)
+* **Clickable links** (table of contents, cross-references, external URLs)
 * **Document outline/bookmarks** sidebar
 * **Password-protected** PDF support
 * **Download** and open in Firefox's native PDF viewer

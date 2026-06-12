@@ -1,0 +1,42 @@
+\documentclass{article}
+\usepackage[colorlinks=true,linkcolor=blue,urlcolor=red]{hyperref}
+\usepackage{lipsum}
+
+\begin{document}
+
+\tableofcontents
+\newpage
+
+\section{Introduction}
+\label{sec:intro}
+This is the introduction. The key finding is described on
+page~\pageref{par:key}. See Section~\ref{sec:conclusion} on
+page~\pageref{sec:conclusion} for the conclusion.
+Here is an external link: \href{https://example.com/}{example link}.
+
+\lipsum[1-4]
+\newpage
+
+\section{Methods}
+\label{sec:methods}
+\lipsum[5-8]
+\newpage
+
+\section{Results}
+\label{sec:results}
+\lipsum[9-10]
+
+\paragraph{Key finding}
+\label{par:key}
+This labeled paragraph sits mid-page so destination links can be tested
+for exact scroll positions.
+
+\lipsum[11-12]
+\newpage
+
+\section{Conclusion}
+\label{sec:conclusion}
+This is the conclusion, referenced from Section~\ref{sec:intro}.
+\lipsum[13-15]
+
+\end{document}

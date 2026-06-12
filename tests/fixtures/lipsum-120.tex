@@ -1,0 +1,11 @@
+% large text-only fixture for the progressive-rendering perf tests
+% regenerate: pdflatex lipsum-120.tex (single pass)
+\documentclass{article}
+\usepackage{lipsum}
+\newcount\iter
+\begin{document}
+\loop
+  \lipsum[1-29]\clearpage
+  \advance\iter by 1
+\ifnum\iter<20 \repeat
+\end{document}

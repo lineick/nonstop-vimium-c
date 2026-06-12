@@ -21,6 +21,7 @@ zip -r "$OUTPUT" . \
   -x "amo/*" \
   -x "*.xpi" \
   -x "*.DS_Store" \
+  -x "tests/*" \
   > /dev/null
 
 echo "Done: ${OUTPUT} ($(du -h "$OUTPUT" | cut -f1))"

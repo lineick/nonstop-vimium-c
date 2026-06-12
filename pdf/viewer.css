@@ -152,6 +152,7 @@ html, body {
   display: flex;
   flex-direction: column;
   align-items: center;
+  position: relative;
 }
 
 /* Page */
@@ -166,11 +167,19 @@ html, body {
   display: block;
 }
 
-/* Text layer for selection */
+/* Text layer for selection: a single document-wide layer (not one per page).
+   Gecko's Selection.modify("line") - used by Vimium C visual mode j/k - walks the
+   line boxes of one block and cannot cross block boundaries, so per-page layers
+   trap the selection at page edges. One shared layer with all pages' text keeps
+   the line-box list continuous across pages. It is centered like the pages
+   (left 50% + translateX) so horizontal re-centering never moves spans relative
+   to their page. */
 .nonstop-text-layer {
   position: absolute;
   top: 0;
-  left: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  height: 100%;
   overflow: hidden;
   opacity: 1;
   line-height: 1;
@@ -178,16 +187,40 @@ html, body {
   text-size-adjust: none;
   -moz-text-size-adjust: none;
   forced-color-adjust: none;
-  transform-origin: 0 0;
   z-index: 2;
 }
 
-.nonstop-text-layer :is(span, br) {
+/* per-page grouping only; must not create a box, or each page would get its
+   own line-box list again */
+.nonstop-text-group {
+  display: contents;
+}
+
+/* spans are absolutely positioned, but brs must stay in normal flow:
+   Gecko derives line boxes from in-flow content (the spans' placeholder frames),
+   and Selection.modify("line") only works when each text line maps to its own
+   line box */
+.nonstop-text-layer span {
   color: transparent;
   position: absolute;
   white-space: pre;
   cursor: text;
   transform-origin: 0% 0%;
+}
+
+/* Link annotations: transparent overlays above the text layer */
+.nonstop-annotation-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow: hidden;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.nonstop-annotation-layer a {
+  position: absolute;
+  pointer-events: auto;
 }
 
 /* endOfContent: like pdf.js - helps define selection boundaries during mouse text selection.
