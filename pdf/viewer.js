@@ -16,7 +16,11 @@
   var zoomSelect = document.getElementById("nonstop-zoom-select");
 
   var pdfDoc = null;
-  var pages = [];         // { div, canvas, textLayer, viewport, rendered, rendering, layersStale }
+  var pages = [];         // see createPagePlaceholder for the entry shape
+  var textLayerEl = null; // single document-wide text layer (see viewer.css)
+  var layerGeneration = 0;  // bumped on zoom; invalidates in-flight layer renders
+  var layersReady = false;  // all page divs sized, layer offsets are final
+  var lastScrollTime = 0;   // background fill yields to active scrolling
   var currentScale = 1;
   var zoomStorageKey = "nonstop-zoom:" + pdfUrl;
   var scaleMode = sessionStorage.getItem(zoomStorageKey) || "page-fit";
@@ -107,10 +111,16 @@
       currentScale = computeScale(viewport);
       updateZoomDisplay();
 
+      createTextLayer();
+
       // Create placeholders for all pages
       for (var i = 1; i <= pdfDoc.numPages; i++) {
         createPagePlaceholder(i, viewport);
       }
+      var endOfContent = document.createElement("div");
+      endOfContent.className = "endOfContent";
+      textLayerEl.appendChild(endOfContent);
+      viewer.appendChild(textLayerEl);
 
       // Set up lazy rendering with IntersectionObserver
       observer = new IntersectionObserver(onPageVisible, {
@@ -123,11 +133,53 @@
         observer.observe(p.div);
       });
 
-      // Set up dimensions and eagerly render text layers for all pages
-      for (var j = 1; j <= pdfDoc.numPages; j++) {
-        initPageLayers(j);
-      }
+      // Size all page divs first: text spans in the shared layer are positioned
+      // by page offset, so every page above them must have its final height
+      var sized = pages.map(function (info) {
+        return pdfDoc.getPage(info.num).then(function (p) {
+          info.baseViewport = p.getViewport({ scale: 1 });
+          info.pageProxy = p;
+          info.div.style.width = Math.floor(info.baseViewport.width * currentScale) + "px";
+          info.div.style.height = Math.floor(info.baseViewport.height * currentScale) + "px";
+        });
+      });
+
+      Promise.all(sized).then(function () {
+        sizeTextLayer();
+        layersReady = true;
+        observePages();   // visible pages render their layers first
+        fillPageLayers(); // the rest fills in the background (Ctrl+F everywhere)
+      }).catch(function (err) {
+        // without sizing there are no reliable layer offsets; text layers
+        // stay off, canvases still render
+        console.warn("nonstop: page sizing failed, text layers disabled: " + (err && err.message || err));
+      });
     });
+  }
+
+  function createTextLayer() {
+    textLayerEl = document.createElement("div");
+    textLayerEl.className = "nonstop-text-layer textLayer";
+
+    // Bind endOfContent mouse events once (like pdf.js, aids mouse drag selection)
+    textLayerEl.addEventListener("mousedown", function () {
+      var end = textLayerEl.querySelector(".endOfContent");
+      if (end) end.classList.add("active");
+    });
+    textLayerEl.addEventListener("mouseup", function () {
+      var end = textLayerEl.querySelector(".endOfContent");
+      if (end) end.classList.remove("active");
+    });
+  }
+
+  // The shared text layer is as wide as the widest page; both are centered,
+  // so each page's horizontal offset inside the layer is (layerW - pageW) / 2
+  function sizeTextLayer() {
+    var maxWidth = 0;
+    pages.forEach(function (p) {
+      maxWidth = Math.max(maxWidth, p.div.offsetWidth);
+    });
+    textLayerEl.style.width = maxWidth + "px";
   }
 
   function createPagePlaceholder(pageNum, defaultViewport) {
@@ -144,19 +196,14 @@
     var canvas = document.createElement("canvas");
     div.appendChild(canvas);
 
-    var textLayer = document.createElement("div");
-    textLayer.className = "nonstop-text-layer";
-    div.appendChild(textLayer);
+    var textGroup = document.createElement("div");
+    textGroup.className = "nonstop-text-group";
+    textGroup.dataset.page = pageNum;
+    textLayerEl.appendChild(textGroup);
 
-    // Bind endOfContent mouse events once (not on every re-render)
-    textLayer.addEventListener("mousedown", function () {
-      var end = textLayer.querySelector(".endOfContent");
-      if (end) end.classList.add("active");
-    });
-    textLayer.addEventListener("mouseup", function () {
-      var end = textLayer.querySelector(".endOfContent");
-      if (end) end.classList.remove("active");
-    });
+    var annotationLayer = document.createElement("div");
+    annotationLayer.className = "nonstop-annotation-layer";
+    div.appendChild(annotationLayer);
 
     viewer.appendChild(div);
 
@@ -164,35 +211,65 @@
       num: pageNum,
       div: div,
       canvas: canvas,
-      textLayer: textLayer,
+      textGroup: textGroup,
+      annotationLayer: annotationLayer,
       viewport: null,
       rendered: false,
       rendering: false,
-      layersStale: false,
+      layersRendered: false,
       pageProxy: null,
       textContent: null,
+      annotations: null,
     });
   }
 
-  function initPageLayers(pageNum) {
-    pdfDoc.getPage(pageNum).then(function (page) {
-      var vp = page.getViewport({ scale: 1 });
-      var info = pages[pageNum - 1];
-      info.baseViewport = vp;
-      info.pageProxy = page;
+  // Render one page's text group and link overlays. Idempotent per zoom
+  // generation: concurrent callers (observer and background fill) skip pages
+  // already done or in flight; a render that resolves after a zoom is dropped.
+  function renderPageLayers(info) {
+    if (info.layersRendered) return Promise.resolve();
+    info.layersRendered = true;
+    var gen = layerGeneration;
+    var page = info.pageProxy;
 
-      var width = Math.floor(vp.width * currentScale);
-      var height = Math.floor(vp.height * currentScale);
-      info.div.style.width = width + "px";
-      info.div.style.height = height + "px";
-
-      // Cache text content and render text layer eagerly (enables Ctrl+F across all pages)
-      page.getTextContent().then(function (textContent) {
-        info.textContent = textContent;
-        var viewport = page.getViewport({ scale: currentScale });
-        renderTextLayerFromContent(textContent, viewport, info.textLayer);
-      });
+    return Promise.all([
+      info.textContent || page.getTextContent(),
+      info.annotations || page.getAnnotations(),
+    ]).then(function (results) {
+      info.textContent = results[0];
+      info.annotations = results[1];
+      if (gen !== layerGeneration) return;
+      var viewport = page.getViewport({ scale: currentScale });
+      applySpanWidths(renderTextLayerFromContent(info.textContent, viewport, info));
+      renderAnnotationLayer(info, viewport);
+    }).catch(function (err) {
+      // keep layersRendered set: retrying every observer callback would loop;
+      // the page gets another chance on the next zoom (new generation)
+      console.warn("nonstop: page " + info.num + " layers failed: " + (err && err.message || err));
     });
+  }
+
+  // Fill the remaining pages' layers in document order, one page per task so
+  // scroll, paint and input stay responsive in between, and paused entirely
+  // while the user is scrolling (visible pages still render via the observer).
+  // Pages the observer already rendered are skipped; a zoom aborts the chain
+  // via layerGeneration.
+  function fillPageLayers() {
+    var gen = layerGeneration;
+    var i = 0;
+    function next() {
+      if (gen !== layerGeneration) return;
+      if (performance.now() - lastScrollTime < 150) {
+        setTimeout(next, 200);
+        return;
+      }
+      while (i < pages.length && pages[i].layersRendered) i++;
+      if (i >= pages.length) return;
+      renderPageLayers(pages[i]).then(function () {
+        setTimeout(next, 0);
+      });
+    }
+    next();
   }
 
   function computeScale(viewport) {
@@ -214,16 +291,21 @@
 
   // --- Lazy Page Rendering ---
 
+  // Re-observing makes the observer re-report already-intersecting pages, so
+  // whatever is on screen renders immediately (used at load and after zoom)
+  function observePages() {
+    pages.forEach(function (p) {
+      observer.unobserve(p.div);
+      observer.observe(p.div);
+    });
+  }
+
   function onPageVisible(entries) {
     entries.forEach(function (entry) {
       if (entry.isIntersecting) {
         var pageNum = parseInt(entry.target.dataset.page, 10);
         renderPage(pageNum);
-        var info = pages[pageNum - 1];
-        if (info && info.layersStale) {
-          info.layersStale = false;
-          refreshPageLayers(pageNum);
-        }
+        if (layersReady) renderPageLayers(pages[pageNum - 1]);
       }
     });
   }
@@ -261,29 +343,43 @@
     });
   }
 
-  // Manual text layer rendering.
-  // Two-pass approach: create+position all spans, then correct widths via scaleX.
-  function renderTextLayerFromContent(textContent, viewport, textLayerDiv) {
-    textLayerDiv.textContent = "";
-    textLayerDiv.className = "nonstop-text-layer textLayer";
-    textLayerDiv.style.width = Math.floor(viewport.width) + "px";
-    textLayerDiv.style.height = Math.floor(viewport.height) + "px";
+  function makeBr() {
+    var br = document.createElement("br");
+    br.setAttribute("role", "presentation");
+    return br;
+  }
+
+  // Manual text layer rendering into the page's group of the shared layer.
+  // Two-pass approach: create+position all spans, then correct widths via
+  // scaleX (applySpanWidths, kept separate so zoom can batch the measurement).
+  // Brs are kept in normal flow (see viewer.css) and one is emitted per visual
+  // line so that Gecko's Selection.modify("line") moves line by line.
+  function renderTextLayerFromContent(textContent, viewport, info) {
+    var group = info.textGroup;
+    group.textContent = "";
+
+    // page offset inside the shared text layer (both are centered)
+    var offX = (textLayerEl.offsetWidth - info.div.offsetWidth) / 2;
+    var offY = info.div.offsetTop;
 
     var items = textContent.items;
     var styles = textContent.styles;
     var vt = viewport.transform; // [a, b, c, d, tx, ty]
     var fragment = document.createDocumentFragment();
     var spanInfos = [];
+    var lastTy = null;
+    var lastFontSize = 0;
 
     for (var i = 0; i < items.length; i++) {
       var item = items[i];
 
-      if (item.hasEOL) {
-        var br = document.createElement("br");
-        br.setAttribute("role", "presentation");
-        fragment.appendChild(br);
+      if (!item.str) {
+        if (item.hasEOL) {
+          fragment.appendChild(makeBr());
+          lastTy = null;
+        }
+        continue;
       }
-      if (!item.str) continue;
 
       // Compose viewport transform with item transform
       var it = item.transform;
@@ -298,6 +394,14 @@
       if (fontSize < 1) continue;
       var angle = Math.atan2(b, a);
 
+      // synthesize a line break when the baseline jumps and the PDF did not
+      // mark one via hasEOL (threshold tolerates sub/superscripts)
+      if (lastTy !== null && Math.abs(ty - lastTy) > 0.5 * Math.max(fontSize, lastFontSize)) {
+        fragment.appendChild(makeBr());
+      }
+      lastTy = ty;
+      lastFontSize = fontSize;
+
       var fontFamily = "sans-serif";
       if (item.fontName && styles[item.fontName]) {
         fontFamily = styles[item.fontName].fontFamily || fontFamily;
@@ -308,8 +412,8 @@
       span.textContent = item.str;
       span.style.fontSize = fontSize.toFixed(1) + "px";
       span.style.fontFamily = fontFamily;
-      span.style.left = tx.toFixed(1) + "px";
-      span.style.top = (ty - fontSize).toFixed(1) + "px";
+      span.style.left = (offX + tx).toFixed(1) + "px";
+      span.style.top = (offY + ty - fontSize).toFixed(1) + "px";
 
       if (Math.abs(angle) > 0.001) {
         span.style.transform = "rotate(" + angle.toFixed(4) + "rad)";
@@ -323,40 +427,74 @@
       spanInfos.push({
         span: span,
         targetWidth: item.width * viewport.scale,
-        angle: angle,
       });
+
+      if (item.hasEOL) {
+        fragment.appendChild(makeBr());
+        lastTy = null;
+      }
     }
 
-    // First pass: append all spans at once
-    textLayerDiv.appendChild(fragment);
+    group.appendChild(fragment);
+    return spanInfos;
+  }
 
-    // Add endOfContent div (like pdf.js)
-    var endOfContent = document.createElement("div");
-    endOfContent.className = "endOfContent";
-    textLayerDiv.appendChild(endOfContent);
-
-    // Second pass: measure rendered widths and correct with scaleX
+  // Second pass: measure rendered widths and correct with scaleX. All reads
+  // happen before all writes: a transform change reframes the span in Gecko,
+  // so interleaving would re-trigger layout work per span (quadratic in
+  // document size for the shared layer).
+  function applySpanWidths(spanInfos) {
     for (var j = 0; j < spanInfos.length; j++) {
       var sInfo = spanInfos[j];
-      if (sInfo.targetWidth <= 0) continue;
-      var actual = sInfo.span.offsetWidth;
-      if (actual <= 0) continue;
-      var scaleX = sInfo.targetWidth / actual;
+      sInfo.actualWidth = sInfo.targetWidth > 0 ? sInfo.span.offsetWidth : 0;
+    }
+    for (var k = 0; k < spanInfos.length; k++) {
+      var s = spanInfos[k];
+      if (s.actualWidth <= 0) continue;
+      var scaleX = s.targetWidth / s.actualWidth;
       if (Math.abs(scaleX - 1) > 0.01) {
-        var existing = sInfo.span.style.transform;
-        sInfo.span.style.transform = (existing ? existing + " " : "") +
+        var existing = s.span.style.transform;
+        s.span.style.transform = (existing ? existing + " " : "") +
           "scaleX(" + scaleX.toFixed(3) + ")";
       }
     }
   }
 
-  // Re-render text layer at the current scale (used on zoom)
-  function refreshPageLayers(pageNum) {
-    var info = pages[pageNum - 1];
-    if (!info.textContent || !info.pageProxy) return;
+  // Link annotations rendered as transparent <a> overlays
+  function renderAnnotationLayer(info, viewport) {
+    var layer = info.annotationLayer;
+    layer.textContent = "";
+    layer.style.width = Math.floor(viewport.width) + "px";
+    layer.style.height = Math.floor(viewport.height) + "px";
 
-    var viewport = info.pageProxy.getViewport({ scale: currentScale });
-    renderTextLayerFromContent(info.textContent, viewport, info.textLayer);
+    (info.annotations || []).forEach(function (annot) {
+      if (annot.subtype !== "Link" || (!annot.url && !annot.dest)) return;
+
+      var rect = viewport.convertToViewportRectangle(annot.rect);
+      var width = Math.abs(rect[0] - rect[2]);
+      var height = Math.abs(rect[1] - rect[3]);
+      if (width <= 0 || height <= 0) return;
+
+      var a = document.createElement("a");
+      a.style.left = Math.min(rect[0], rect[2]).toFixed(1) + "px";
+      a.style.top = Math.min(rect[1], rect[3]).toFixed(1) + "px";
+      a.style.width = width.toFixed(1) + "px";
+      a.style.height = height.toFixed(1) + "px";
+
+      if (annot.url) {
+        a.href = annot.url;
+        a.target = "_blank";
+        a.rel = "noopener noreferrer";
+        a.title = annot.url;
+      } else {
+        a.href = "#";
+        a.addEventListener("click", function (e) {
+          e.preventDefault();
+          goToDest(annot.dest);
+        });
+      }
+      layer.appendChild(a);
+    });
   }
 
   // --- Zoom ---
@@ -377,12 +515,20 @@
     // Remember scroll position as a ratio
     var scrollRatio = container.scrollTop / (container.scrollHeight - container.clientHeight || 1);
 
-    // Reset canvas state and update dimensions
+    // Drop in-flight layer renders; their output would be at the old scale
+    layerGeneration++;
+
+    // Reset canvas and layer state, update dimensions. Groups must be cleared
+    // right away: they share one layer, so stale spans would overlap other
+    // pages. Re-rendering happens lazily (visible pages first, via observer).
     pages.forEach(function (p) {
       p.rendered = false;
       p.rendering = false;
       p.canvas.width = 0;
       p.canvas.height = 0;
+      p.layersRendered = false;
+      p.textGroup.textContent = "";
+      p.annotationLayer.textContent = "";
 
       if (p.baseViewport) {
         var w = Math.floor(p.baseViewport.width * currentScale);
@@ -391,23 +537,7 @@
         p.div.style.height = h + "px";
       }
     });
-
-    // Mark all layers as stale; only refresh visible pages now (lazy refresh for rest)
-    var scrollTop = container.scrollTop;
-    var viewTop = scrollTop;
-    var viewBottom = scrollTop + container.clientHeight;
-    for (var i = 0; i < pages.length; i++) {
-      pages[i].layersStale = true;
-    }
-    for (var i = 0; i < pages.length; i++) {
-      var div = pages[i].div;
-      var divTop = div.offsetTop - container.offsetTop;
-      var divBottom = divTop + div.offsetHeight;
-      if (divBottom >= viewTop && divTop <= viewBottom) {
-        pages[i].layersStale = false;
-        refreshPageLayers(i + 1);
-      }
-    }
+    sizeTextLayer();
 
     // Update zoom select display
     updateZoomDisplay();
@@ -416,13 +546,8 @@
     requestAnimationFrame(function () {
       container.scrollTop = scrollRatio * (container.scrollHeight - container.clientHeight);
 
-      // Re-trigger observer for visible pages
-      if (observer) {
-        pages.forEach(function (p) {
-          observer.unobserve(p.div);
-          observer.observe(p.div);
-        });
-      }
+      if (observer) observePages();
+      if (layersReady) fillPageLayers();
     });
   }
 
@@ -482,8 +607,9 @@
 
     for (var i = 0; i < pages.length; i++) {
       var div = pages[i].div;
-      var divTop = div.offsetTop - container.offsetTop;
-      var divMid = divTop + div.offsetHeight / 2;
+      // offsetTop is relative to #nonstop-viewer, which sits at the top of
+      // the scroll content, so it is directly comparable to scrollTop
+      var divMid = div.offsetTop + div.offsetHeight / 2;
       var viewMid = scrollTop + container.clientHeight / 2;
       var dist = Math.abs(divMid - viewMid);
       if (dist < bestDist) {
@@ -507,6 +633,44 @@
     }
   }
 
+  // Navigate to a PDF destination (named string or explicit array)
+  function goToDest(dest) {
+    var resolved = typeof dest === "string" ? pdfDoc.getDestination(dest) : Promise.resolve(dest);
+    resolved.then(function (d) {
+      if (!Array.isArray(d) || d[0] == null) return null;
+      return pdfDoc.getPageIndex(d[0]).then(function (idx) {
+        scrollToDest(idx + 1, d);
+      });
+    }).catch(function (err) {
+      console.warn("nonstop: broken link destination: " + (err && err.message || err));
+    });
+  }
+
+  // Scroll so the destination's y coordinate (PDF user space) is vertically
+  // centered in the view. Destination arrays look like [page, {name}, ...]:
+  // XYZ carries y at [3], FitH/FitBH at [2], FitR's top edge at [5]; y may be
+  // null ("keep current position"). Other types fall back to the page top.
+  function scrollToDest(pageNum, d) {
+    var info = pages[pageNum - 1];
+    var type = d[1] && d[1].name;
+    var x = 0;
+    var y = null;
+    if (type === "XYZ") { x = d[2] || 0; y = d[3]; }
+    else if (type === "FitH" || type === "FitBH") y = d[2];
+    else if (type === "FitR") { x = d[2] || 0; y = d[5]; }
+
+    if (!info || !info.pageProxy || typeof y !== "number") {
+      goToPage(pageNum);
+      return;
+    }
+    var viewport = info.pageProxy.getViewport({ scale: currentScale });
+    // x matters for rotated pages, where the viewport y depends on it
+    var pt = viewport.convertToViewportPoint(x, y);
+    container.scrollTop = Math.max(0, info.div.offsetTop + pt[1] - container.clientHeight / 2);
+    currentPageNum = pageNum;
+    pageInputEl.value = pageNum;
+  }
+
   // --- Outline (bookmarks) ---
 
   function loadOutline() {
@@ -525,16 +689,7 @@
       a.style.paddingLeft = (12 + depth * 16) + "px";
       a.addEventListener("click", function (e) {
         e.preventDefault();
-        if (item.dest) {
-          pdfDoc.getDestination(typeof item.dest === "string" ? item.dest : null).then(function (dest) {
-            dest = dest || item.dest;
-            if (Array.isArray(dest)) {
-              pdfDoc.getPageIndex(dest[0]).then(function (idx) {
-                goToPage(idx + 1);
-              });
-            }
-          });
-        }
+        if (item.dest) goToDest(item.dest);
       });
       parentEl.appendChild(a);
 
@@ -588,6 +743,7 @@
   // Scroll tracking
   var scrollTimer = null;
   container.addEventListener("scroll", function () {
+    lastScrollTime = performance.now();
     if (scrollTimer) clearTimeout(scrollTimer);
     scrollTimer = setTimeout(updateCurrentPage, 50);
   });

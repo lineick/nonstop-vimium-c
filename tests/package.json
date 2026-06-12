@@ -1,0 +1,12 @@
+{
+  "name": "nonstop-vimium-c-tests",
+  "private": true,
+  "description": "End-to-end tests for the Nonstop Vimium C PDF viewer",
+  "scripts": {
+    "test": "node --test --test-concurrency=1 --test-timeout=240000"
+  },
+  "dependencies": {
+    "geckodriver": "^5.0.0",
+    "selenium-webdriver": "^4.27.0"
+  }
+}
