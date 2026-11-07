@@ -23,7 +23,10 @@
   var lastScrollTime = 0;   // background fill yields to active scrolling
   var currentScale = 1;
   var zoomStorageKey = "nonstop-zoom:" + pdfUrl;
-  var scaleMode = sessionStorage.getItem(zoomStorageKey) || "page-fit";
+  // Chromium MIME handler frames cannot access sessionStorage.
+  var savedScaleMode = null;
+  try { savedScaleMode = sessionStorage.getItem(zoomStorageKey); } catch (e) {}
+  var scaleMode = savedScaleMode || "page-fit";
   var containerWidth = 0;
   var containerHeight = 0;
   var observer = null;
@@ -42,7 +45,9 @@
   // --- Load PDF ---
 
   function loadPdf() {
-    var loadingTask = pdfjsLib.getDocument({
+    var loadingTask = pdfjsLib.getDocument(window.__nonstopPdfData ? {
+      data: window.__nonstopPdfData,
+    } : {
       url: pdfUrl,
       withCredentials: true,
     });
