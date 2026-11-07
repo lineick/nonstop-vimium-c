@@ -1,5 +1,7 @@
 # Tests
 
+For the experimental Chromium package, see [the Helium test command](../chromium/README.md#validate-with-helium).
+
 End-to-end tests that drive the extension in a real (headless) Firefox via
 Selenium/geckodriver.
 

@@ -12,6 +12,9 @@ Vibecoded with Claude.
 
 Available in the firefox extension store: [addons.mozilla.org/en-US/firefox/addon/nonstop-vimium/](addons.mozilla.org/en-US/firefox/addon/nonstop-vimium/)
 
+An experimental Chromium package is available for local testing with Chromium
+151+ and Vimium C 2.12.2. See [Chromium setup and limitations](chromium/README.md).
+
 ## Motivation
 
 Firefox blocks extensions from running in its built-in PDF viewer (`resource://pdf.js/`). This means Vimium C keyboard shortcuts don't work when viewing documents. Nonstop Vimium C fixes this by providing a compatible environment for the extension to inject into.
