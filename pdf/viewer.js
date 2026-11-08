@@ -499,7 +499,14 @@
 
   // --- Zoom ---
 
-  function setZoom(newScaleMode) {
+  // origin is a viewport point for gesture zoom; toolbar/keyboard zoom keeps
+  // the existing scroll-ratio behavior.
+  function setZoom(newScaleMode, origin) {
+    // An explicit zoom command supersedes any gesture waiting for a frame.
+    if (wheelZoomFrame !== null) {
+      cancelAnimationFrame(wheelZoomFrame);
+      wheelZoomScale = wheelZoomOrigin = wheelZoomFrame = null;
+    }
     scaleMode = newScaleMode;
     try { sessionStorage.setItem(zoomStorageKey, scaleMode); } catch (e) {}
     if (!pdfDoc) return;
@@ -510,13 +517,33 @@
     var oldScale = currentScale;
     currentScale = computeScale(info.baseViewport);
 
-    if (Math.abs(oldScale - currentScale) < 0.001) return;
+    if (oldScale === currentScale) return;
+
+    // Anchor to a page rather than the whole document: page gaps and padding
+    // do not scale, and pages can move horizontally as they grow.
+    var anchor = null;
+    if (origin) {
+      var nearestDistance = Infinity;
+      pages.forEach(function (p) {
+        var rect = p.div.getBoundingClientRect();
+        var distance = Math.max(rect.top - origin.y, origin.y - rect.bottom, 0);
+        if (distance < nearestDistance) {
+          nearestDistance = distance;
+          anchor = {
+            div: p.div,
+            x: (origin.x - rect.left) / oldScale,
+            y: (origin.y - rect.top) / oldScale,
+          };
+        }
+      });
+    }
 
     // Remember scroll position as a ratio
     var scrollRatio = container.scrollTop / (container.scrollHeight - container.clientHeight || 1);
 
     // Drop in-flight layer renders; their output would be at the old scale
     layerGeneration++;
+    var zoomGeneration = layerGeneration;
 
     // Reset canvas and layer state, update dimensions. Groups must be cleared
     // right away: they share one layer, so stale spans would overlap other
@@ -542,9 +569,18 @@
     // Update zoom select display
     updateZoomDisplay();
 
+    if (anchor) {
+      var rect = anchor.div.getBoundingClientRect();
+      container.scrollLeft += rect.left + anchor.x * currentScale - origin.x;
+      container.scrollTop += rect.top + anchor.y * currentScale - origin.y;
+    }
+
     // Restore scroll position
     requestAnimationFrame(function () {
-      container.scrollTop = scrollRatio * (container.scrollHeight - container.clientHeight);
+      if (zoomGeneration !== layerGeneration) return;
+      if (!origin) {
+        container.scrollTop = scrollRatio * (container.scrollHeight - container.clientHeight);
+      }
 
       if (observer) observePages();
       if (layersReady) fillPageLayers();
@@ -748,11 +784,30 @@
     scrollTimer = setTimeout(updateCurrentPage, 50);
   });
 
-  // Ctrl+mouse wheel zoom (10% steps)
+  // Trackpad pinch arrives as Ctrl+wheel in pixel mode. Match the browser's
+  // exponential delta-to-scale mapping, and resize at most once per frame.
+  var wheelZoomScale = null;
+  var wheelZoomOrigin = null;
+  var wheelZoomFrame = null;
   container.addEventListener("wheel", function (e) {
     if (e.ctrlKey) {
+      // Read deltaMode first so Firefox does not convert line deltas to pixels.
+      var deltaMode = e.deltaMode;
       e.preventDefault();
-      if (e.deltaY < 0) zoomIn();
+      if (deltaMode === WheelEvent.DOM_DELTA_PIXEL) {
+        if (!e.deltaY || !pdfDoc) return;
+        wheelZoomScale = Math.max(0.1, Math.min(5,
+          (wheelZoomScale === null ? currentScale : wheelZoomScale) * Math.exp(-e.deltaY / 100)));
+        wheelZoomOrigin = { x: e.clientX, y: e.clientY };
+        if (wheelZoomFrame === null) {
+          wheelZoomFrame = requestAnimationFrame(function () {
+            var scale = wheelZoomScale;
+            var origin = wheelZoomOrigin;
+            wheelZoomScale = wheelZoomOrigin = wheelZoomFrame = null;
+            setZoom(String(scale), origin);
+          });
+        }
+      } else if (e.deltaY < 0) zoomIn();
       else if (e.deltaY > 0) zoomOut();
     }
   }, { passive: false });

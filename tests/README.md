@@ -20,6 +20,17 @@ npm test
 
 Set `HEADED=1` to watch the browser.
 
+The gesture tests can also run on their own, including in Zen:
+
+```bash
+FIREFOX_BINARY=/Applications/Zen.app/Contents/MacOS/zen node --test zoom.test.js
+```
+
+They serve the production viewer over localhost and dispatch pixel-mode pinch
+events in a headless browser. They cover proportional zoom, event batching,
+cursor anchoring, limits, and existing wheel/keyboard behavior without requiring
+extension navigation. Physical trackpad gesture feel still needs a manual check.
+
 ## What is covered
 
 * PDF response interception produces the viewer shell (background.js)
