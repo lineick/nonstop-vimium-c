@@ -20,6 +20,17 @@ npm test
 
 Set `HEADED=1` to watch the browser.
 
+The gesture tests can also run on their own, including in Zen:
+
+```bash
+FIREFOX_BINARY=/Applications/Zen.app/Contents/MacOS/zen node --test zoom.test.js
+```
+
+They serve the production viewer over localhost and dispatch pixel-mode pinch
+events in a headless browser. They cover proportional zoom, event batching,
+cursor anchoring, limits, and existing wheel/keyboard behavior without requiring
+extension navigation. Physical trackpad gesture feel still needs a manual check.
+
 ## What is covered
 
 * PDF response interception produces the viewer shell (background.js)
@@ -57,5 +68,5 @@ Set `HEADED=1` to watch the browser.
 * `fixtures/lipsum-120.pdf` (120 pages of plain text, used by `perf.test.js`)
   is generated from `fixtures/lipsum-120.tex` (`pdflatex lipsum-120.tex`,
   single pass).
-* The two test files share hardcoded geckodriver/fixture-server ports, so the
-  npm script runs them sequentially (`--test-concurrency=1`).
+* `viewer.test.js` and `perf.test.js` share hardcoded geckodriver/fixture-server
+  ports, so the npm script runs test files sequentially (`--test-concurrency=1`).
