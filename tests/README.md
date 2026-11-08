@@ -68,5 +68,5 @@ extension navigation. Physical trackpad gesture feel still needs a manual check.
 * `fixtures/lipsum-120.pdf` (120 pages of plain text, used by `perf.test.js`)
   is generated from `fixtures/lipsum-120.tex` (`pdflatex lipsum-120.tex`,
   single pass).
-* The two test files share hardcoded geckodriver/fixture-server ports, so the
-  npm script runs them sequentially (`--test-concurrency=1`).
+* `viewer.test.js` and `perf.test.js` share hardcoded geckodriver/fixture-server
+  ports, so the npm script runs test files sequentially (`--test-concurrency=1`).
